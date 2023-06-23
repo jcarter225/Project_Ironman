@@ -1,0 +1,855 @@
+---
+title: 'Project 3: Ironman'
+author: "Justin Carter"
+date: "4/6/2022"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# Introduction
+
+The purpose of this document is to utilize data from the 2020 and 2021 Ironman competitions to answer two research questions:
+
+1. If and/or how performance metrics from the 2020 race subcomponents (swimming, biking, running, and transition time), along with demographic information, are useful for explaining overall performance in the 2021 race (in overall time)
+
+2. If athletes that competed in both 2020 and 2021 were substantially different in terms of performance metrics (race subcomponents) than the athletes that only competed in 2021
+
+The Data Exploration section and its subsections involve the reading-in of the datasets and combining them. As these datasets did not provide unique keys for each athlete between the competitions, the implications of joining the datasets were discussed. A scatterplot matrix was created in order to observe trends within and between variables in the dataset. 
+
+The Univariate Relationships with Overall 2021 Ironman Times section and its subsections encompass the creation of 4 simple linear regression models. These models utilized 2020 Ironman race subcomponent data in order to predict 2021 Ironman overall times. The results of the models were visualized and interpreted. 
+
+In the Multiple Linear Regression section (and its subsections), two similar multiple linear regression models were created in order to predict 2021 Ironman overall times utilizing multiple variables from the 2020 Ironman competition. Accuracy metrics between the models were compared, and a model was selected. The findings from the selected model were discussed. 
+
+Descriptive statistics between athletes that competed in both the 2020 and 2021 races and athletes that just competed in the 2020 race were displayed in the Descriptive Statistics section. Hypothesis tests were conducted in order to determine whether differences in performance between the two groups were statistically significant. 
+
+# Data Exploration
+
+## Reading In Data and Transforming Times
+
+```{r include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(GGally)
+library(gridExtra)
+library(ggplot2)
+
+#read in data sets
+twenty <- read_csv("IM_Florida_20.csv")
+twentyOne <- read_csv("IM_Florida_21.csv")
+
+#swimming was reported in multiple ways. Convert to hours and make scatterplot to understand the values within the variable:
+
+
+#if greater than 10, make it the minute value
+#transform run, swim, bike, and overall times
+
+#convert swim times to hours or minutes depending on the value:
+
+twenty$SwimTime <- hms(twenty$SwimTime)
+
+twenty$SwimTime <- ifelse(hour(twenty$SwimTime)<10,hour(twenty$SwimTime) *60 + minute(twenty$SwimTime) ,hour(twenty$SwimTime))
+
+#check SwimTimes
+hist(twenty$SwimTime)
+which.max(twenty$SwimTime)
+twenty$SwimTime[1317]
+
+twentyOne$SwimTime <- hms(twentyOne$SwimTime)
+
+twentyOne$SwimTime <- ifelse(hour(twentyOne$SwimTime)<10,hour(twentyOne$SwimTime) *60 + minute(twentyOne$SwimTime) ,hour(twentyOne$SwimTime))
+
+#check SwimTimes
+hist(twentyOne$SwimTime)
+which.max(twentyOne$SwimTime)
+max(twentyOne$SwimTime, na.rm=TRUE)
+
+
+#convert rest of the times:
+
+twenty <- twenty %>%
+  mutate(RunTime = hms(RunTime),
+         RunTime = hour(RunTime) * 60 + minute(RunTime),
+         BikeTime = hms(BikeTime),
+         BikeTime = hour(BikeTime) * 60 + minute(BikeTime),                                   OverallTime = hms(OverallTime),
+         OverallTime = hour(OverallTime) * 60 + minute(OverallTime))
+
+twentyOne <- twentyOne %>%
+  mutate(RunTime = hms(RunTime),
+         RunTime = hour(RunTime) * 60 + minute(RunTime),
+         BikeTime = hms(BikeTime),
+         BikeTime = hour(BikeTime) * 60 + minute(BikeTime),                                   OverallTime = hms(OverallTime),
+         OverallTime = hour(OverallTime) * 60 + minute(OverallTime))
+         
+
+
+```
+Primarily, the data sets were read in, and the variables RunTime, SwimTime, BikeTime, and OverallTime were converted into numeric minutes from an hour-minute-second format. Since the format of SwimTime was variable based on whether or not an athlete completed the swimming portion in under or over an hour, it was assumed that values over 10 in the left-most time value were times that were under an hour. Times with values that were under 10 in the left-most time value for SwimTime were treated as times that were completed in the span of 1 or more hours.  This was done in order to properly make computations with these variables.
+
+## Creating the TransitionTime Variable
+
+```{r include=FALSE}
+#make column for TransitionTime, calculated as OverallTime - (RunTime + SwimTime + BikeTime)
+
+twenty <- twenty %>%
+  mutate(TransitionTime = OverallTime - (RunTime + SwimTime + BikeTime))
+
+
+twentyOne <- twentyOne %>%
+  mutate(TransitionTime = OverallTime - (RunTime + SwimTime + BikeTime))
+
+
+```
+
+Transition time for each athlete was calculated as the difference of OverallTime and the sum of RunTime, SwimTime, and BikeTime.
+
+## Creating the AgeGroup Variable
+
+```{r include=FALSE}
+#Create Agegroup variable that is based on Division, but denotes only the age group, not gender
+
+twenty$AgeGroup <- twenty$Division
+
+twentyOne$AgeGroup <- twentyOne$Division
+
+#get rid of first character in each value to get rid of genders and preserve age group
+twenty$AgeGroup<- substr(twenty$AgeGroup, 2,nchar(twenty$AgeGroup))
+
+twentyOne$AgeGroup<- substr(twentyOne$AgeGroup, 2,nchar(twentyOne$AgeGroup))
+
+
+
+#turn MPRO and FPRO values to NA's
+twenty$AgeGroup[(twenty$AgeGroup =="PRO") | (twenty$AgeGroup =="PC")] <- NA
+
+twentyOne$AgeGroup[(twentyOne$AgeGroup =="PRO") | (twentyOne$AgeGroup =="PC")] <- NA
+
+
+#change to factors
+twenty$AgeGroup<- as.factor(twenty$AgeGroup)
+twentyOne$AgeGroup<- as.factor(twentyOne$AgeGroup)
+
+#levels(twenty$AgeGroup)
+#levels(twentyOne$AgeGroup)
+
+#possible Divisions:
+
+#[1] "F18-24" "F25-29" "F30-34" "F35-39"
+#  [5] "F40-44" "F45-49" "F50-54" "F55-59"
+#  [9] "F60-64" "F65-69" "F70-74" "FPRO"  
+# [13] "M18-24" "M25-29" "M30-34" "M35-39"
+# [17] "M40-44" "M45-49" "M50-54" "M55-59"
+# [21] "M60-64" "M65-69" "M70-74" "M75-79"
+# [25] "M80-84"
+
+
+
+
+```
+A new variable, AgeGroup, was created for each athlete. This variable constituted a transformation of the Division variable. The gender attribute was removed, and AgeGroup was cleaned such that it only contained the age group of each athlete. If an athlete was labeled such that no age group was given (i.e., as MPRO, FPRO, MPC, or FPC), an NA value was assigned to their age group. 
+
+## Combining the Data Sets and Quality Check
+
+```{r include=FALSE}
+#join on name, and then get rid of rows that contain a difference of more than 2 age brackets
+
+#get the numerical version of the first 2 characters of the AgeGroup in 2021 is 10 or greater. This will ensure that have not moved up more than 1 age group since the last race. This difference reflects that the difference between any two age groups is at least 10 in this data set, and that generally age groups consist of 5-year spreads. 
+
+#use inner join and join via Name
+#rename in 2021 data set:
+#Big, Country, Gender, Division, DivisionRank, OverallTime, OverallRank, SwimTime, SwimRank, BikeTime, BikeRank, RunTime, RunRank, FinishStatus, TransitionTime, AgeGroup
+
+#name columns in 2021 data set to set up outer join:
+twentyOne = rename(twentyOne, N_Bib = Bib, 
+                   N_Country = Country, 
+                   N_Gender = Gender,
+                   N_Division = Division,
+                   N_DivisionRank = DivisionRank, 
+                   N_OverallTime = OverallTime, 
+                   N_OverallRank = OverallRank,
+                   N_SwimTime = SwimTime,
+                   N_SwimRank = SwimRank,
+                   N_BikeTime = BikeTime,
+                   N_BikeRank = BikeRank,
+                   N_RunTime = RunTime,
+                   N_RunRank = RunRank,
+                   N_FinishStatus = FinishStatus,
+                   N_TransitionTime = TransitionTime,
+                   N_AgeGroup = AgeGroup)
+
+#perform inner join on Name:
+
+combined <- twenty %>%
+  inner_join(twentyOne, by = "Name")
+
+comb_experiment <- combined
+
+comb_experiment <- comb_experiment %>%
+  mutate(Age20 = as.double(substr(AgeGroup, 1,2)),
+         Age21 = as.double(substr(N_AgeGroup, 1,2)), Age_Diff = Age21-Age20)
+
+comb_experiment <- comb_experiment %>%
+  filter((Age_Diff<10) & (Age_Diff >-1))
+
+hist(comb_experiment$Age_Diff)
+
+
+#put 2021 Overall Minutes at the end of the data frame
+
+comb_cleaned <- comb_experiment %>%
+  select(-c(Age20, Age21, Age_Diff))
+
+N_OverallTime <- comb_cleaned$N_OverallTime
+
+comb_cleaned <- comb_cleaned %>%
+  select(-N_OverallTime) %>%
+  cbind(N_OverallTime)
+
+
+
+```
+An inner join was performed in order to combine the 2020 and 2021 data sets. The total number of rows between the two data sets before joining was 3687. 247 rows remained after performing this join. The vast majority of the remaining rows contained data for individuals that competed in both 2020 and 2021. A quality check was performed to better ensure the reliability of the data post-join. Rows where athletes had impossible differences in the AgeGroup variable between 2020 and 2021 were dropped. These rows likely contained information from different individuals that possessed the same name. Rows where the difference in age group could not be calculated were kept in the data set. After this cleaning was performed, 231 rows remained in the data set. 
+
+
+## Observe Relationships Between 2020 Times and 2021 Overall Time
+
+```{r echo=FALSE}
+#make new df that is friendly for ggpairs; rename N_OverallTime for clarity
+oldTimesNewTime <- comb_cleaned %>%
+  select(SwimTime, RunTime, BikeTime, N_OverallTime, Gender) %>%
+  rename(NewOverallTime = N_OverallTime)
+
+pairs_plot <-ggpairs(oldTimesNewTime,
+        title="2020 Times vs 2021 Overall Time",
+        columns = c(1,2,3,4),
+        mapping=ggplot2::aes(colour = Gender, alpha = 0.1)) +
+  theme(text = element_text(size=8))
+
+pairs_plot
+
+
+```
+
+To better understand the relationship between athletes' performance in 2020 to their performance in 2021, their times in running, swimming and biking were plotted against each other, as well as against the overall time they took to complete the race in 2021. Correlations between these variables were calculated. As can be seen above, athletes' performance in every venue were positively correlated with their overall time a year later, and moderate-to-high positive correlations were observed between the subcomponents of the race. SwimTime, RunTime, BikeTime, and NewOverallTime (overall time taken to complete the race in 2021) seem to approach normal distributions. The highest correlation with athletes' overall time in 2021 (regardless of gender) was the time they took to complete the running portion of the race. 
+
+# Univariate Relationships with Overall 2021 Ironman Times
+
+This section of the report covers univariate relationships between individual event times of swimming, biking, running, and transition time in 2020 to the variable of overall time in 2021.
+
+## Fitting the models
+
+Four simple linear regression models were created to predict overall 2021 Ironman times. Each of the 2020 race components (swimming, biking, running, and transition times) were utilized to predict 2021 Ironman race times. 
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+SFitSwim <- lm(N_OverallTime ~ SwimTime, data=comb_cleaned) #2021 Overall and 2020 Swim
+
+SFitBike <- lm(N_OverallTime ~ BikeTime, data=comb_cleaned) #2021 Overall and 2020 Bike
+
+SFitRun <- lm(N_OverallTime ~ RunTime, data=comb_cleaned) #2021 Overall and 2020 Run
+
+SFitTransition <- lm(N_OverallTime ~ TransitionTime, data=comb_cleaned) #2021 Overall and 2020 Transition time
+
+
+ 
+
+```
+
+## Summary of Findings
+
+The relationships that were measured by the simple regression models were summarized in a univariate regression table as well as a forest plot. Both can be found below.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(flextable)#for univariate regression table
+
+library(broom) #for tidy() function
+
+
+tidy_Swim <- tidy(SFitSwim)
+tidy_Swim <- tidy_Swim[2,1:2]
+
+tidy_Bike<- tidy(SFitBike)
+tidy_Bike <- tidy_Bike[2,1:2]
+
+tidy_Run <- tidy(SFitRun)
+tidy_Run <- tidy_Run[2,1:2]
+
+
+tidy_Transition <- tidy(SFitTransition)
+tidy_Transition <- tidy_Transition[2,1:2]
+
+#programatically get upper and lower bounds to put into df later:
+
+#lower bounds
+lower<- c(
+confint(SFitSwim)[2,1],
+confint(SFitBike)[2,1],
+confint(SFitRun)[2,1],
+confint(SFitTransition)[2,1])
+
+#upper bounds
+upper <- c(
+confint(SFitSwim)[2,2],
+confint(SFitBike)[2,2],
+confint(SFitRun)[2,2],
+confint(SFitTransition)[2,2])
+
+#make df for forest diagram and Univariate Tablee
+forest_df <- rbind(tidy_Swim, tidy_Bike, tidy_Run, tidy_Transition)
+
+forest_df <- forest_df %>%
+  cbind(lower) %>%
+  cbind(upper) %>%
+  rename("Race Component" = term, Estimate = estimate, "95% CI Lower Bound" = lower, "95% CI Upper Bound" = upper )
+
+
+
+round_df <- function(x, digits) {
+    # round all numeric variables
+    # x: data frame
+    # digits: number of digits to round
+    numeric_columns <- sapply(x, mode) == 'numeric'
+    x[numeric_columns] <-  round(x[numeric_columns], digits)
+
+}
+
+`Race Component` = c("SwimTime", "BikeTime", "RunTime", "TransitionTime")
+
+forest_df <- round_df(forest_df, 2)
+
+forest_df <- cbind(`Race Component`, forest_df)
+
+univariate_regression_table = flextable(forest_df)
+
+#add title
+univariate_regression_table = add_header_lines(univariate_regression_table, values = "Univariate Regression")
+
+#modify title text and table width
+univariate_regression_table = fontsize(univariate_regression_table, i=1, size = 14, part = "header")
+
+univariate_regression_table = width(univariate_regression_table, width=1.2)
+univariate_regression_table
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height = 6, fig.width=8}
+#df to be used for univariate regression table; first get coefficient estimate and names of the variables
+
+
+#forest graph:
+ggplot(data=forest_df, aes(y=Estimate, ymin=`95% CI Lower Bound`, ymax=`95% CI Upper Bound`, x=`Race Component`, color=`Race Component`)) +
+  geom_pointrange() + #make forest plot 
+  geom_hline(yintercept=0, lty=3) + #add reference line at 0; the null hypothesis in our case
+  coord_flip() + #changes orientation of plot  
+  labs(x="Race Component", y="Coefficient Estimate", title="2020 Race Components and 2021 Overall Time") + 
+  theme_minimal() +
+  theme(plot.title=element_text(size=12))
+
+```
+
+## Interpretation of Results
+
+From the forest plot above, it appears that 2021 overall time changed the most per unit of change in 2020 transition time (9 minutes) compared to the other components of the 2020 Ironman. However, 2020 transition time also saw the most variability within its values compared to the other variables. All components of the 2020 Ironman were positively associated with overall time in 2021. In addition, all race components were found to have statistically-significant relationships with overall time at the p= .05 level. 
+
+# Multiple Linear Regression
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# use division and race time information to predict 2021 performance, with explanatory model
+
+#make division and Gender variable in comb_cleaned a factor variable:
+
+comb_cleaned = comb_cleaned %>%
+  mutate(Division = as.factor(Division),
+         Gender = as.factor(Gender), Country=as.factor(Country),
+         AgeGroup = as.factor(AgeGroup))
+
+glimpse(comb_cleaned)
+
+
+
+#get quantitative variables into df, then run test for multicolinearity:
+
+quantitative_df <- comb_cleaned %>%
+  select(
+         DivisionRank,
+         OverallTime,
+         SwimTime,
+         BikeTime,
+         RunTime,
+         TransitionTime,
+         N_OverallTime)
+
+#get rid of rows w/ na values for comparision purposes
+quantitative_df <- na.omit(quantitative_df)
+
+cor(quantitative_df)
+
+#fit 2 competing models:
+
+
+model1 <- lm(N_OverallTime ~  OverallTime + SwimTime + TransitionTime,
+             data = comb_cleaned)
+
+model2 <-  lm(N_OverallTime ~DivisionRank + SwimTime +BikeTime +RunTime + TransitionTime, data = comb_cleaned)
+
+```
+Exploratory analysis was conducted in order to determine which variables in the data set were appropriate for fitting a multiple regression model to predict 2021 overall time in the Ironman.
+
+The quantitative variables in the data set were correlated with each other in order to assess which variables were most associated with 2021 overall time, and which predictor variables were highly-associated with each other.
+
+Predictor variables with correlations with other predictors at or above 0.7 were excluded from prospective models. 
+
+After removing said variables, two prospective multiple linear regression models were created. 
+
+Model 1 contained the variables:
+
+* OverallTime 
+
+* SwimTime
+
+* TransitionTime 
+
+Model 2 contained the variables: 
+
+* DivisionRank 
+
+* SwimTime
+
+* BikeTime
+
+* RunTime 
+
+* TransitionTime
+
+```{r include=FALSE}
+# Assessing Prospective Model Performance
+
+library(broom)
+
+#look to see if models violate linear model assumptions:
+
+plot(model1) #linear fine Normality NOT fine, equal variance NOT FINE; some outliers
+
+
+plot(model2) #normality NOT FINE, linearity FINE, equal variance FINE; some outliers
+
+
+#get general stats about model performance:
+glance(model1)# AIC 1728.153 but Adj R squared is 0.719
+
+
+glance(model2) #AIC 1729.676 but adj.r.squared is 0.7187
+
+```
+## Model Performance Assessment and Comparison
+
+Models 1 and 2 were assessed via obtaining various error metrics. In order to do this, the data set was split into 2 groups: a test set (which encompassed 1/4 of the data) and a training set, which encompassed the remaining data. Both models were trained on the training set and then predicted values of 2021 overall time in the test set. Adjusted R Squared, AIC, MAPE, and RMSE were calculated for both models. The results can be seen below.
+
+```{r include=FALSE}
+set.seed(1) #for consistent results
+
+#test model performance on new data:
+
+# ===============model 1:===============
+
+#get rid of NA values in comb_cleaned data set:
+comb_cleaned_full = comb_cleaned #for later
+
+comb_cleaned <- na.omit(comb_cleaned)
+
+train_index = sample(1:158, size=120) # get random sample of 160 rows for training. Leave rest in test set
+
+model1_train_data = comb_cleaned[train_index,]
+model1_test_data = comb_cleaned[-train_index,]
+
+
+
+#make model based on training data
+model1_train <- lm(N_OverallTime ~ DivisionRank + OverallTime + SwimTime + TransitionTime,
+             data = model1_train_data)
+
+
+# get predictions for N_OverallTime on test set
+model1_test_data = model1_test_data %>% mutate(pred_N_OverallTime = predict(model1_train, newdata =
+model1_test_data))
+
+#get summary statistics (MAPE and RMSE) for the predictions of training model on the test set
+model1_MAPE_RMSE<- model1_test_data %>% summarize(MAPE = mean(abs((N_OverallTime - pred_N_OverallTime)/N_OverallTime))*100,
+RMSE = sqrt(mean((N_OverallTime - pred_N_OverallTime)^2)))
+
+#Model 1 RMSE = 48.38; MAPE = 4.632
+
+#===========Model 2======================
+
+#same train and test data as  model1; just for consistency purposes
+model2_train_data = comb_cleaned[train_index,]
+model2_test_data = comb_cleaned[-train_index,]
+
+
+
+#make model based on training data
+model2_train <-  lm(N_OverallTime ~DivisionRank + SwimTime +BikeTime +RunTime + TransitionTime, data = model2_train_data)
+
+
+
+
+# get predictions for N_OverallTime on test set
+model2_test_data = model2_test_data %>% mutate(pred_N_OverallTime = predict(model2_train, newdata =
+model2_test_data))
+
+#get summary statistics (MAPE and RMSE) for the predictions of training model on the test set
+model2_MAPE_RMSE<- model2_test_data %>% summarize(MAPE = mean(abs((N_OverallTime - pred_N_OverallTime)/N_OverallTime))*100,
+RMSE = sqrt(mean((N_OverallTime - pred_N_OverallTime)^2)))
+
+#models 1 and 2 have virtually the same RMSE and MAPE, so choose model 1 b/c has fewer variables
+
+
+```
+
+```{r echo=FALSE}
+#make table comparing models 1 and 2
+
+
+model1_AIC_AR2E <- glance(model1)[c(2,8)]
+model2_AIC_AR2E <- glance(model2)[c(2,8)]
+
+#make df for forest diagram
+forest_df2 <- rbind(model1_AIC_AR2E, model2_AIC_AR2E)
+
+Errors <- rbind(model1_MAPE_RMSE,model2_MAPE_RMSE)
+
+
+forest_df2<- cbind(forest_df2, Errors)
+
+#round values in df
+
+round_df <- function(x, digits) {
+    # round all numeric variables
+    # x: data frame 
+    # digits: number of digits to round
+    numeric_columns <- sapply(x, mode) == 'numeric'
+    x[numeric_columns] <-  round(x[numeric_columns], digits)
+    
+}
+
+forest_df2<- round_df(forest_df2, 2)
+
+Name <- c("Model 1", "Model 2")
+
+forest_df2 <- cbind(Name, forest_df2)
+
+
+forest_df2 <- forest_df2 %>%
+
+  rename("Adjusted R Squared" = adj.r.squared)
+
+
+
+univariate_regression_table2 = flextable(forest_df2)
+
+#add title
+univariate_regression_table2 = add_header_lines(univariate_regression_table2, values = "Model Comparision")
+
+#modify title text and table width
+univariate_regression_table2 = fontsize(univariate_regression_table2, i=1, size = 14, part = "header")
+
+univariate_regression_table2 = width(univariate_regression_table2, width=1.2)
+univariate_regression_table2
+```
+As can be seen above, the error metrics between Model 1 and Model 2 are nearly identical. As Model 1 contained fewer variables and similar error metrics to the more complicated Model 2, Model 1 was selected as the final model to predict values of overall 2021 Ironman times. The results above suggest that Model 1's predictions of 2021 overall time were off by 44.59 minutes on average. In addition, the model's predictions were off by about 4.77% on average.
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+# ## Compare Model 1 to Model suggested by LASSO; for curiosity only. Not part of official analysis.
+# 
+# #create lasso model to recommend variables
+# library(glmnet)
+# 
+# glimpse(comb_cleaned_final)
+# 
+# unique(comb_cleaned_final$FinishStatus)
+# 
+# #get rid of Bib, Name, 
+# 
+# #change FinishStatus, 
+# 
+# #columns 1-17, and 33
+# 
+# #further clean data set to test it w/ lasso:
+# 
+# comb_cleaned_final <- comb_cleaned[,c(1:17,33)]
+# 
+# comb_cleaned_final <- comb_cleaned_final %>%
+#   select(-c(Bib, Name))
+# 
+# comb_cleaned_final <- comb_cleaned_final %>%
+#   select(-FinishStatus)
+# 
+# #find the best LASSO penalized logistic regression model:
+# 
+# preds_lasso <- model.matrix(N_OverallTime~., comb_cleaned_final)[,-1] #get rid of column of all 1's; rest of matrix is needed
+# response <- comb_cleaned_final$N_OverallTime
+# 
+# #find the best lambda using cross-validation
+# set.seed(1) # for repeatibility
+# cv.lasso <- cv.glmnet(x=preds_lasso, y=response, alpha = 1, family = "gaussian")
+# 
+# 
+# 
+# #fit lasso model (with LASSO's, alpha always equals 1)
+# comb_cleaned_final.lasso <- glmnet(x=preds_lasso, y=response, alpha=1, family="gaussian", lambda = cv.lasso$lambda.min) # use best lambda in LASSO model
+# 
+# #get coefficients for best lasso model:
+# coef(comb_cleaned_final.lasso)
+# 
+# # use variables in new model, and check it out:
+# 
+# #variables recommended by Lasso:
+# 
+# #Division, OverallTime, SwimTime, TransitionTime, AgeGroup
+# 
+# model3 <- lm(N_OverallTime ~Division + OverallTime + SwimTime + TransitionTime + AgeGroup, data = comb_cleaned_final)
+# 
+# glance(model3)
+
+
+```
+
+## Model Interpretation
+
+```{r echo=FALSE}
+
+
+tidy_model1 <- tidy(model1)
+
+
+tidy_model1 <- tidy_model1[c(2:4), c(1:2)]
+
+tidy_df <- tidy_model1
+
+tidy_df <- tidy_df %>%
+  mutate(`95% CI Lower Bound`=confint(model1)[c(2:4),1],
+         `95% CI Upper Bound` = confint(model1)[c(2:4),2]) %>%
+  rename(`Race Component`=term,
+         Estimate=estimate)
+
+
+ggplot(data=tidy_df, aes(y=Estimate, ymin=`95% CI Lower Bound`, ymax=`95% CI Upper Bound`, x=`Race Component`, color=`Race Component`)) +
+  geom_pointrange() + #make forest plot 
+  geom_hline(yintercept=0, lty=3) + #add reference line at 0; the null hypothesis in our case
+  coord_flip() + #changes orientation of plot  
+  labs(x="Race Component", y="Coefficient Estimate", title="2020 Race Components and 2021 Overall Time") + 
+  theme_minimal() +
+  theme(plot.title=element_text(size=12))
+```
+
+From the forest plot above, it appears that 2021 overall time changed the most per unit of change in 2020 swim time (about 1.5 minutes) compared to the other components of the 2020 Ironman. 2020 transition time saw the most variability within its values compared to the other variables. All swim and overall times of the 2020 Ironman were positively associated with overall time in 2021. Transition time in 2020 had a coefficient estimate that was positive, however, its 95% confidence interval indicates that its relationship with 2021 overall time is questionable. Indeed, transition time in 2020 may have a negative relationship, or no relationship whatsoever to 2021 overall time. This finding, of course, starkly contrasts the results from the previous section. The distinction between these findings seems to be that when the other variables in the multiple regression model are held constant, transition time has little or no relationship with 2021 overall time. Race components (besides transition time) were found to have statistically-significant relationships with overall time at the p= .05 level. 
+
+# Descriptive Statistics
+
+This section focuses on the comparison of athletes that competed in just the 2021 Ironman competition to athletes that competed in both the 2020 and 2021 Ironman.
+
+```{r include=FALSE}
+library(hyperSpec)
+#take the twentyOne and filter it by whether or not the names in it are in the names of comb_cleaned_full
+
+#comb_cleaned_full will be a df that has athletes that competed in both 2020 and 2021, #but may have NA values in at least some of the races
+
+twentyOne <- twentyOne %>%
+  filter(!(N_Bib %in% comb_cleaned_full$N_Bib))
+
+#twentyOne df went from 2333 athletes to 2103 athletes
+
+#give labels to new column to denote whether athletes was in both competitions or just 2021 competition, then combine:
+
+comb_cleaned_full <- comb_cleaned_full %>%
+  select(N_Bib,Name, N_Country, N_Gender, N_Division, N_DivisionRank, N_OverallRank, N_OverallTime, N_SwimTime, N_SwimRank, N_BikeTime, N_BikeRank, N_RunTime, N_RunRank, N_FinishStatus, N_TransitionTime, N_AgeGroup)
+
+comb_cleaned_full$Competition ="Both"
+twentyOne$Competition="2021"
+
+
+
+#make df for comparing athletes that competed in both races to those who just competed in 2021:
+BothVs21 <- rbind(comb_cleaned_full, twentyOne)
+
+
+Averages <- BothVs21 %>%
+  group_by(Competition)%>%
+  summarize(Mean_SwimTime = mean(N_SwimTime, na.rm=TRUE),
+                                 Mean_RunTime = mean(N_RunTime, na.rm=TRUE),
+                                 Mean_BikeTime = mean(N_BikeTime, na.rm=TRUE),
+                                 Mean_TransitionTime = mean(N_TransitionTime, na.rm=TRUE),
+                                 Mean_OverallTime = mean(N_OverallTime, na.rm=TRUE))
+
+```
+Below, the mean times to complete each subcomponent of the 2021 Ironman were compared between athletes that competed in both the 2020 and 2021 Ironman race and athletes that just competed in the 2021 Ironman.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#make graphs for descriptive statistics regarding 2021 & 2020 athletes vs just 2021 athletes:
+
+#mean swim times
+STBar <- ggplot(Averages, aes(x=Competition, y = Mean_SwimTime)) +
+  geom_bar(aes(fill=Competition),stat="identity") + 
+  geom_label(label = c("112.35", "114.16"), nudge_y=2) +
+    scale_fill_manual(values = c("#7fc97f", "#beaed4"))+
+  labs(y="2021 Mean SwimTime (Minutes)") +
+    theme_minimal() +
+   theme(legend.position="none") 
+
+STBar
+
+
+#mean run times
+RTBar <- ggplot(Averages, aes(x=Competition, y = Mean_RunTime)) +
+  geom_bar(aes(fill=Competition),stat="identity") + 
+  geom_label(label = c("300.97", "304.18"), nudge_y=2) +
+    scale_fill_manual(values = c("#fdc086", "#ffff99"))+
+  labs(y="2021 Mean RunTime (Minutes)") +
+    theme_minimal() +
+   theme(legend.position="none") 
+
+RTBar
+
+
+
+#mean Bike times
+BTBar <- ggplot(Averages, aes(x=Competition, y = Mean_BikeTime)) +
+  geom_bar(aes(fill=Competition),stat="identity") + 
+  geom_label(label = c("386.41", "381.15"), nudge_y=2) +
+    scale_fill_manual(values = c("#386cb0", "#f0027f"))+
+  labs(y="2021 Mean BikeTime (Minutes)") +
+    theme_minimal() +
+   theme(legend.position="none") 
+
+BTBar
+
+#Mean Transition Times
+TTBar <- ggplot(Averages, aes(x=Competition, y = Mean_TransitionTime)) +
+  geom_bar(aes(fill=Competition),stat="identity") + 
+  geom_label(label = c("24.00", "24.09"), nudge_y=0.5) +
+    scale_fill_manual(values = c("#bf5b17", "#666666"))+
+  labs(y="2021 Mean TransitionTime (Minutes)") +
+    theme_minimal() +
+   theme(legend.position="none") 
+
+TTBar
+
+
+
+#mean Overall Times
+OTBar <- ggplot(Averages, aes(x=Competition, y = Mean_OverallTime)) +
+  geom_bar(aes(fill=Competition),stat="identity") + 
+  geom_label(label = c("812.37", "812.30"), nudge_y=2) +
+    scale_fill_manual(values = c("#e41a1c", "#377eb8"))+
+  labs(y="2021 Mean OverallTime (Minutes)") +
+    theme_minimal() +
+   theme(legend.position="none") 
+
+OTBar
+```
+
+```{r include=FALSE}
+#conduct t-tests to see if athletes that competed in both races had significantly different times in the various components of the 2021 race:
+
+#get swimTime vectors to compare
+BothSwimTimes <- BothVs21 %>%
+  select(N_SwimTime, Competition)%>%
+  filter(Competition == "Both") %>%
+  select(-Competition)
+
+TwentyOneSwimTimes <- BothVs21 %>%
+  select(N_SwimTime, Competition)%>%
+  filter(Competition == "2021") %>%
+  select(-Competition)
+
+
+#get RunTime vectors to compare
+BothRunTimes <- BothVs21 %>%
+  select(N_RunTime, Competition)%>%
+  filter(Competition == "Both") %>%
+  select(-Competition)
+
+TwentyOneRunTimes <- BothVs21 %>%
+  select(N_RunTime, Competition)%>%
+  filter(Competition == "2021") %>%
+  select(-Competition)
+
+
+
+#get BikeTime vectors to compare
+BothBikeTimes <- BothVs21 %>%
+  select(N_BikeTime, Competition)%>%
+  filter(Competition == "Both") %>%
+  select(-Competition)
+
+TwentyOneBikeTimes <- BothVs21 %>%
+  select(N_BikeTime, Competition)%>%
+  filter(Competition == "2021") %>%
+  select(-Competition)
+
+
+#get TransitionTime vectors to compare
+BothTransitionTimes <- BothVs21 %>%
+  select(N_TransitionTime, Competition)%>%
+  filter(Competition == "Both") %>%
+  select(-Competition)
+
+TwentyOneTransitionTimes <- BothVs21 %>%
+  select(N_TransitionTime, Competition)%>%
+  filter(Competition == "2021") %>%
+  select(-Competition)
+
+
+#get OverallTime vectors to compare
+BothOverallTimes <- BothVs21 %>%
+  select(N_OverallTime, Competition)%>%
+  filter(Competition == "Both") %>%
+  select(-Competition)
+
+TwentyOneOverallTimes <- BothVs21 %>%
+  select(N_OverallTime, Competition)%>%
+  filter(Competition == "2021") %>%
+  select(-Competition)
+
+
+
+t.test(BothSwimTimes, TwentyOneSwimTimes) #No sig diff
+
+t.test(BothRunTimes, TwentyOneRunTimes) 
+
+t.test(BothBikeTimes, TwentyOneBikeTimes) 
+
+t.test(BothTransitionTimes, TwentyOneTransitionTimes) 
+
+t.test(BothOverallTimes, TwentyOneOverallTimes) 
+```
+
+Welch Two Sample t-tests were conducted in order to determine whether or not the differences in mean times to complete each subcomponent of the 2021 Ironman competition were significant between the two groups of athletes. The results yielded no statistically significant differences in the means between the two groups of athletes in any subcomponent of the 2021 Ironman competition at the p = .05 level. That is to say, there is no evidence to suggest that there are significant differences in the performance of athletes that competed in both the 2020 and 2021 Ironman competitions compared to athletes that competed in just the 2021 Ironman. 
+
+
+## Conclusion
+
+There are several key takeaways that can be drawn from the sections above. Primarily, 2020 transition time was best able to predict 2021 overall Ironman time (in terms of univariate models utilizing race subcomponents). It was found that the combination of 2020 swim time, 2020 overall time, and 2020 transition time was able to predict 2021 overall time within a 5% absolute margin of error. This error rate was similar to a more complicated model that utilized a larger number of variables. Finally, no statistical significance was observed between the differences of performances of athletes that competed in both Ironman competitions compared to athletes that competed in just the 2020 competition in any race subcomponent.  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

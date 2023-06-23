@@ -1,0 +1,43 @@
+Project Three
+
+Your project must be submitted in both RMarkdown and Word formats. Projects submitted in other formats will not be graded. During this project you will produce a paper presenting an application of statistical methods to the data described below. The paper should not exceed 6 pages, including figures and tables, and must begin with an appropriate title highlighting the topic and analysis. Keep in mind that the report should be written for a particular audience: your own supervisor in the Data Science team, who may use some of your results in a presentation to their supervisors (not in the Data Science team).  
+
+The Data and The Questions
+An Ironman triathlon is an impressive endurance event that covers 140.6 miles (Swim 2.4 miles, Bike 112 miles, Run 26.2 miles).  We are going to focus on the results from the Florida Ironman races from 2020 and 2021.
+
+Our primary focus is on individuals who competed in both the 2020 and 2021 Ironman Florida. We want to determine if and how performance metrics from the 2020 race (swim time, bike time, run time, and transition time) along with demographic information (gender and age group) are useful for explaining overall performance in the 2021 race (overall time). 
+
+In addition to this primary question, your supervisor has asked you to also address the following secondary question:
+
+Are the athletes that competed in both 2020 and 2021 substantially different in terms of performance metrics (time for completing swim, bike, and run) than the athletes that only competed in 2021?
+
+The athlete results for the 2020 and 2021 Florida Ironman races are available in the files IM_FL_20.csv Download IM_FL_20.csvand IM_FL_21.csv Download IM_FL_21.csv, respectively. The following information is recorded for each athlete.
+
+Bib = bib number assigned for the race
+
+Name
+
+Country
+
+Gender – Male or Female
+
+Division – Denotes gender and age group for most athletes (e.g. M40-44 means male in the 40-44 year old age bracket). Exceptions to this are MPRO, FPRO, MPC, and FPC where PRO means professional and PC means physically challenged.
+
+DivisionRank – Overall rank compared to others in the same division
+
+OverallTime – Overall time for completing the full race including swim, bike, run, and transition times. Reported in HH:MM:SS format.
+
+OverallRank
+
+SwimTime – Time for completing the swim portion of the race. Reported in HH:MM:SS format for those taking 1 hour or more. Reported in MM:SS:00 for those taking less that 1 hour.
+
+SwimRank
+
+BikeTime – Time for completing the bike portion of the race. Reported in HH:MM:SS format.
+
+BikeRank
+
+RunTime – Time for completing the run portion of the race. Reported in HH:MM:SS format.
+RunRank
+
+FinishStatus – Categorical variable with value DNF (did not finish), DNS (did not start), DQ (disqualified), or Finisher.
